@@ -63,7 +63,7 @@ public class PlayerTemplateMod
     {
         event.getDispatcher().register(
                 LiteralArgumentBuilder.<CommandSourceStack>literal("playertemplate")
-                        .requires(cs->cs.hasPermission(4)) //permission
+                        .requires(cs->cs.hasPermission(2)) //permission
                         .then(Commands.literal("apply")
                                 .then(Commands.argument("players", EntityArgument.players())
                                         .then(Commands.literal("wipe")
