@@ -1,0 +1,9 @@
+{
+  "text.playertemplate.remove.success": "Player Template removed.",
+  "text.playertemplate.remove.failure.not_found": "Player Template not found.",
+  "text.playertemplate.reload.success": "Player Templates reloaded.",
+  "text.playertemplate.reload.failure": "Reload failed!",
+  "text.playertemplate.save.success": "Player Template saved..",
+  "text.playertemplate.apply.success": "Player Template applied to %s players.",
+  "text.playertemplate.apply.failure": "Failed to apply template to %s players. Template not found."
+}

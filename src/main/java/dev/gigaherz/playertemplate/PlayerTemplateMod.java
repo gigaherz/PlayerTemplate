@@ -1,20 +1,23 @@
 package dev.gigaherz.playertemplate;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.datafixers.types.templates.Tag;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.logging.LogUtils;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.*;
+import net.minecraftforge.common.util.FakePlayer;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -25,13 +28,13 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.items.ItemHandlerHelper;
 import net.minecraftforge.network.NetworkConstants;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
-import java.util.List;
+import java.util.Collection;
+import java.util.HashSet;
 
 @Mod(PlayerTemplateMod.MODID)
 public class PlayerTemplateMod
@@ -59,83 +62,124 @@ public class PlayerTemplateMod
         TemplateConfig.load();
     }
 
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_TEMPLATES = (ctx, builder) -> {
+        var keys = TemplateConfig.itemSetNames();
+        return SharedSuggestionProvider.suggest(keys, builder);
+    };
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_TEMPLATES_DEFAULT = (ctx, builder) -> {
+        var keys = new HashSet<>(TemplateConfig.itemSetNames());
+        keys.add("default");
+        return SharedSuggestionProvider.suggest(keys, builder);
+    };
     private void command(RegisterCommandsEvent event)
     {
         event.getDispatcher().register(
                 LiteralArgumentBuilder.<CommandSourceStack>literal("playertemplate")
-                        .requires(cs->cs.hasPermission(Commands.LEVEL_GAMEMASTERS)) //permission
-                        .then(Commands.literal("apply")
+                        .requires(cs -> cs.hasPermission(Commands.LEVEL_GAMEMASTERS)) //permission
+                        .then(Commands.literal("give")
                                 .then(Commands.argument("players", EntityArgument.players())
-                                        .then(Commands.literal("wipe")
-                                                .executes(ctx -> {
-                                                    var players = EntityArgument.getPlayers(ctx, "players");
-                                                    TemplateConfig.applyTemplate(players, true);
-                                                    ctx.getSource().sendSuccess(new TextComponent("Player Template Applied to " + players.size() + " players."), false);
-                                                    return 0;
-                                                }))
-                                        .executes(ctx -> {
-                                            var players = EntityArgument.getPlayers(ctx, "players");
-                                            TemplateConfig.applyTemplate(players, false);
-                                            ctx.getSource().sendSuccess(new TextComponent("Player Template Applied to " + players.size() + " players."), false);
-                                            return 0;
-                                        })
-                                )
-                                .then(Commands.literal("wipe")
-                                        .executes(ctx -> {
-                                            TemplateConfig.applyTemplate(List.of(ctx.getSource().getPlayerOrException()), true);
-                                            ctx.getSource().sendSuccess(new TextComponent("Player Template Applied."), false);
-                                            return 0;
-                                        })
-                                )
-                                .executes(ctx -> {
-                                    TemplateConfig.applyTemplate(List.of(ctx.getSource().getPlayerOrException()), false);
-                                    ctx.getSource().sendSuccess(new TextComponent("Player Template Applied."), false);
-                                    return 0;
-                                })
-                        )
-                        .then(Commands.literal("reload")
-                                .executes(ctx -> {
-                                    if (TemplateConfig.load())
-                                    {
-                                        ctx.getSource().sendSuccess(new TextComponent("Player Template Reloaded."), true);
-                                        return 0;
-                                    }
-                                    else
-                                    {
-                                        ctx.getSource().sendFailure(new TextComponent("Reload failed!"));
-                                        return -1;
-                                    }
-                                })
-                        )
+                                        .then(Commands.argument("template", StringArgumentType.word())
+                                                .suggests(SUGGEST_TEMPLATES)
+                                                .executes(ctx -> doApplyCommand(ctx,
+                                                        EntityArgument.getPlayers(ctx, "players"),
+                                                        StringArgumentType.getString(ctx, "template"),
+                                                        false)))
+                                        .executes(ctx -> doApplyCommand(ctx,
+                                                EntityArgument.getPlayers(ctx, "players"),
+                                                "default",
+                                                false))))
+                        .then(Commands.literal("replace")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("template", StringArgumentType.word())
+                                                .suggests(SUGGEST_TEMPLATES)
+                                                .executes(ctx -> doApplyCommand(ctx,
+                                                        EntityArgument.getPlayers(ctx, "players"),
+                                                        StringArgumentType.getString(ctx, "template"),
+                                                        true)))
+                                        .executes(ctx -> doApplyCommand(ctx,
+                                                EntityArgument.getPlayers(ctx, "players"),
+                                                "default",
+                                                true))))
+                        .then(Commands.literal("reload").executes(this::doReloadCommand))
                         .then(Commands.literal("save")
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(ctx -> {
-                                            TemplateConfig.saveTemplate(EntityArgument.getPlayer(ctx, "player"));
-                                            ctx.getSource().sendSuccess(new TextComponent("Player Template Saved."), true);
-                                            return 0;
-                                        })
-                                )
-                                .executes(ctx -> {
-                                    TemplateConfig.saveTemplate(ctx.getSource().getPlayerOrException());
-                                    ctx.getSource().sendSuccess(new TextComponent("Player Template Saved."), true);
-                                    return 0;
-                                })
-                        )
+                                .then(Commands.argument("template", StringArgumentType.word())
+                                        .suggests(SUGGEST_TEMPLATES_DEFAULT)
+                                        .executes(ctx -> doSaveCommand(ctx,
+                                                ctx.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(ctx, "template"))))
+                                .executes(ctx -> doSaveCommand(ctx,
+                                        ctx.getSource().getPlayerOrException(),
+                                        "default")))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("template", StringArgumentType.word())
+                                        .suggests(SUGGEST_TEMPLATES)
+                                        .executes(ctx -> doRemoveCommand(ctx,
+                                                StringArgumentType.getString(ctx, "template"))))));
+    }
 
-        );
+    private int doRemoveCommand(CommandContext<CommandSourceStack> ctx, String template)
+    {
+        if (TemplateConfig.removeTemplate(template))
+        {
+            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.remove.success"), true);
+            return 0;
+        }
+        else
+        {
+            ctx.getSource().sendFailure(Component.translatable("text.playertemplate.remove.failure.not_found"));
+            return -1;
+        }
+    }
+
+    private int doReloadCommand(CommandContext<CommandSourceStack> ctx)
+    {
+        if (TemplateConfig.load())
+        {
+            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.reload.success"), true);
+            return 0;
+        }
+        else
+        {
+            ctx.getSource().sendFailure(Component.translatable("text.playertemplate.reload.failure"));
+            return -1;
+        }
+    }
+
+    private int doSaveCommand(CommandContext<CommandSourceStack> ctx, ServerPlayer player, String template)
+    {
+        TemplateConfig.saveTemplate(player, template);
+        ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.save.success"), true);
+        return 0;
+    }
+
+    private int doApplyCommand(CommandContext<CommandSourceStack> ctx, Collection<ServerPlayer> players, String template, boolean wipe)
+    {
+        if (TemplateConfig.applyTemplate(players, wipe, template))
+        {
+            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.apply.success", players.size()), false);
+            return 0;
+        }
+        else
+        {
+            ctx.getSource().sendFailure(Component.translatable("text.playertemplate.apply.failure", players.size()));
+            return -1;
+        }
     }
 
     private void playerLoggedIn(final PlayerEvent.PlayerLoggedInEvent event)
     {
         var player = event.getPlayer();
         if (player.level.isClientSide) return;
-
-        player.getCapability(TEMPLATE).ifPresent(template -> {
+        if (player instanceof FakePlayer) return;
+        if (player instanceof ServerPlayer sp)
+        {
+            player.getCapability(TEMPLATE).ifPresent(template -> {
                 if (!template.given)
                 {
-                    TemplateConfig.applyTemplate(template, player, false);
+                    TemplateConfig.autoApplyDefault(template, sp);
                 }
-        });
+            });
+        }
     }
 
     private void attach(final AttachCapabilitiesEvent<Entity> event)
