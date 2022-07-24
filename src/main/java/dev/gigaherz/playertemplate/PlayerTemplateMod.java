@@ -168,7 +168,7 @@ public class PlayerTemplateMod
 
     private void playerLoggedIn(final PlayerEvent.PlayerLoggedInEvent event)
     {
-        var player = event.getPlayer();
+        var player = event.getEntity();
         if (player.level.isClientSide) return;
         if (player instanceof FakePlayer) return;
         if (player instanceof ServerPlayer sp)
@@ -218,7 +218,7 @@ public class PlayerTemplateMod
     private void playerClone(PlayerEvent.Clone event)
     {
         var from = event.getOriginal();
-        var to = event.getPlayer();
+        var to = event.getEntity();
 
         if (from.level.isClientSide) return;
 
