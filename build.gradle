@@ -1,99 +1,97 @@
-buildscript {
-    repositories {
-        // These repositories are only for Gradle plugins, put any other repositories in the repository block further below
-        maven { url = 'https://maven.minecraftforge.net' }
-        mavenCentral()
-    }
-    dependencies {
-        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
-    }
-}
-// Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
 plugins {
+    id 'java-library'
     id 'eclipse'
+    id 'idea'
     id 'maven-publish'
+    id 'net.neoforged.gradle.userdev' version '7.0.61'
+    id 'net.neoforged.gradle.mixin' version '7.0.61'
 }
-apply plugin: 'net.minecraftforge.gradle'
 
 version = '1.3.0'
 group = 'dev.gigaherz.playertemplate' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = "PlayerTemplate-UNKNOWN"
 
-project.afterEvaluate {
-    archivesBaseName = "PlayerTemplate-${project.MC_VERSION}"
+base {
+    archivesName = "PlayerTemplate-1.20.4"
 }
+
 
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
-println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
 
-minecraft {
-    mappings channel: 'official', version: '1.19.4'
+runs {
+    // applies to all the run configs below
+    configureEach {
+        systemProperty 'forge.logging.markers', '' // 'REGISTRIES'
+        systemProperty 'forge.logging.console.level', 'debug'
 
-    runs {
-        client {
-            workingDirectory project.file('run')
+        workingDirectory project.file('run')
 
-            property 'forge.logging.markers', ''
-            property 'forge.logging.console.level', 'debug'
+        modSource project.sourceSets.main
+    }
 
-            mods {
-                playertemplate {
-                    source sourceSets.main
-                }
-            }
-        }
+    client {
+    }
 
-        server {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', ''
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                playertemplate {
-                    source sourceSets.main
-                }
-            }
-        }
+    server {
     }
 }
-
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.19.4-45.0.6'
+    implementation 'net.neoforged:neoforge:20.4.56-beta'
 }
 
-// Example for how to get properties into the manifest for reading at runtime.
 jar {
+    from('/') {
+        include 'LICENSE.txt'
+    }
+
     manifest {
         attributes([
                 "Specification-Title"     : "playertemplate",
-                "Specification-Vendor"    : "examplemodsareus",
+                "Specification-Vendor"    : "gigaherz",
                 "Specification-Version"   : "1", // We are version 1 of ourselves
                 "Implementation-Title"    : project.name,
                 "Implementation-Version"  : project.jar.archiveVersion,
-                "Implementation-Vendor"   : "examplemodsareus",
+                "Implementation-Vendor"   : "gigaherz",
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
 }
 
-jar.finalizedBy('reobfJar')
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            artifact jar
-        }
-    }
-    repositories {
-        maven {
-            url "file://${project.projectDir}/mcmodsrepo"
-        }
-    }
+tasks.withType(GenerateModuleMetadata) {
+    enabled = false
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+project.afterEvaluate {
+    publish.dependsOn('reobfJar')
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                artifactId project.archivesBaseName
+                from components.java
+            }
+        }
+
+        repositories {
+            if (findProperty("RELEASE") && System.env.giga_maven_host != null) {
+                System.out.println("Remote publish enabled on " + System.env.giga_maven_host)
+                maven {
+                    url System.env.giga_maven_host
+                    credentials {
+                        username System.env.giga_maven_user
+                        password System.env.giga_maven_password
+                    }
+                }
+            }
+            else {
+                System.out.println("Remote publish disabled.")
+                maven {
+                    url "$projectDir/../CommonMaven"
+                }
+            }
+        }
+    }
 }

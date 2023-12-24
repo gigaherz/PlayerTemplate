@@ -11,8 +11,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.fml.loading.FMLPaths;
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -133,9 +133,8 @@ public class TemplateConfig
 
         for (var player : players)
         {
-            player.getCapability(PlayerTemplateMod.TEMPLATE).ifPresent(template -> {
-                applyTemplate(template, player, wipeExistingInventory, set);
-            });
+            var template = player.getData(PlayerTemplateMod.TEMPLATE);
+            applyTemplate(template, player, wipeExistingInventory, set);
         }
 
         return true;

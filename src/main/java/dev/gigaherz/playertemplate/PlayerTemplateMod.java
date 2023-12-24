@@ -5,56 +5,43 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.logging.LogUtils;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.core.Direction;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.common.capabilities.*;
-import net.minecraftforge.common.util.FakePlayer;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.IExtensionPoint;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.network.NetworkConstants;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.slf4j.Logger;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.function.Supplier;
 
 @Mod(PlayerTemplateMod.MODID)
 public class PlayerTemplateMod
 {
-    private static final Logger LOGGER = LogUtils.getLogger();
     public static final String MODID = "playertemplate";
 
-    public PlayerTemplateMod()
+    public PlayerTemplateMod(IEventBus modEventBus)
     {
-        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::setup);
-        modEventBus.addListener(this::capRegister);
 
-        MinecraftForge.EVENT_BUS.addListener(this::command);
-        MinecraftForge.EVENT_BUS.addListener(this::playerLoggedIn);
-        MinecraftForge.EVENT_BUS.addListener(this::playerClone);
-        MinecraftForge.EVENT_BUS.addGenericListener(Entity.class, this::attach);
+        ATTACHMENT_TYPES.register(modEventBus);
 
-        //Make sure the mod being absent on the other network side does not cause the client to display the server as incompatible
-        ModLoadingContext.get().registerExtensionPoint(IExtensionPoint.DisplayTest.class, () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
+        NeoForge.EVENT_BUS.addListener(this::command);
+        NeoForge.EVENT_BUS.addListener(this::playerLoggedIn);
     }
 
     private void setup(FMLCommonSetupEvent event)
@@ -121,7 +108,7 @@ public class PlayerTemplateMod
     {
         if (TemplateConfig.removeTemplate(template))
         {
-            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.remove.success"), true);
+            ctx.getSource().sendSuccess(()-> Component.translatable("text.playertemplate.remove.success"), true);
             return 0;
         }
         else
@@ -135,7 +122,7 @@ public class PlayerTemplateMod
     {
         if (TemplateConfig.load())
         {
-            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.reload.success"), true);
+            ctx.getSource().sendSuccess(()-> Component.translatable("text.playertemplate.reload.success"), true);
             return 0;
         }
         else
@@ -148,7 +135,7 @@ public class PlayerTemplateMod
     private int doSaveCommand(CommandContext<CommandSourceStack> ctx, ServerPlayer player, String template)
     {
         TemplateConfig.saveTemplate(player, template);
-        ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.save.success"), true);
+        ctx.getSource().sendSuccess(()-> Component.translatable("text.playertemplate.save.success"), true);
         return 0;
     }
 
@@ -156,7 +143,7 @@ public class PlayerTemplateMod
     {
         if (TemplateConfig.applyTemplate(players, wipe, template))
         {
-            ctx.getSource().sendSuccess(Component.translatable("text.playertemplate.apply.success", players.size()), false);
+            ctx.getSource().sendSuccess(()-> Component.translatable("text.playertemplate.apply.success", players.size()), false);
             return 0;
         }
         else
@@ -169,82 +156,43 @@ public class PlayerTemplateMod
     private void playerLoggedIn(final PlayerEvent.PlayerLoggedInEvent event)
     {
         var player = event.getEntity();
-        if (player.level.isClientSide) return;
+        if (player.level().isClientSide) return;
         if (player instanceof FakePlayer) return;
         if (player instanceof ServerPlayer sp)
         {
-            player.getCapability(TEMPLATE).ifPresent(template -> {
-                if (!template.given)
-                {
-                    TemplateConfig.autoApplyDefault(template, sp);
-                }
-            });
-        }
-    }
-
-    private void attach(final AttachCapabilitiesEvent<Entity> event)
-    {
-        if (event.getObject() instanceof ServerPlayer sp)
-        {
-            event.addCapability(new ResourceLocation(MODID, "template"), new ICapabilitySerializable<CompoundTag>()
+            var template = player.getData(TEMPLATE);
+            if (!template.given)
             {
-                final TemplateCapability templateCapability = new TemplateCapability();
-                final LazyOptional<TemplateCapability> lazyOptional = LazyOptional.of(() -> templateCapability);
-
-                @Override
-                public CompoundTag serializeNBT()
-                {
-                    var tag = new CompoundTag();
-                    tag.putBoolean("given", templateCapability.given);
-                    return tag;
-                }
-
-                @Override
-                public void deserializeNBT(CompoundTag nbt)
-                {
-                    templateCapability.given = nbt.getBoolean("given");
-                }
-
-                @NotNull
-                @Override
-                public <T> LazyOptional<T> getCapability(@NotNull Capability<T> cap, @Nullable Direction side)
-                {
-                    return TEMPLATE.orEmpty(cap, lazyOptional);
-                }
-            });
+                TemplateConfig.autoApplyDefault(template, sp);
+            }
         }
     }
 
-    private void playerClone(PlayerEvent.Clone event)
-    {
-        var from = event.getOriginal();
-        var to = event.getEntity();
+    public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.Keys.ATTACHMENT_TYPES, MODID);
 
-        if (from.level.isClientSide) return;
 
-        from.reviveCaps();
-
-        from.getCapability(TEMPLATE).ifPresent(template0 -> {
-            to.getCapability(TEMPLATE).ifPresent(template1 -> {
-                template1.copyFrom(template0);
-            });
-        });
-    }
-
-    private void capRegister(RegisterCapabilitiesEvent event)
-    {
-        event.register(TemplateCapability.class);
-    }
-
-    static final Capability<TemplateCapability> TEMPLATE = CapabilityManager.get(new CapabilityToken<>(){});
+    public static final Codec<TemplateCapability> CODEC = RecordCodecBuilder.create(inst ->
+            inst.group(Codec.BOOL.fieldOf("given").forGetter(t -> t.given))
+                    .apply(inst, TemplateCapability::new));
+    public static final Supplier<AttachmentType<TemplateCapability>> TEMPLATE = ATTACHMENT_TYPES.register(
+            "template", () -> AttachmentType
+                    .builder(TemplateCapability::new)
+                    .serialize(CODEC)
+                    .copyOnDeath()
+                    .build()
+    );
 
     static class TemplateCapability
     {
         public boolean given;
 
-        public void copyFrom(TemplateCapability template0)
+        public TemplateCapability()
         {
-            given = template0.given;
+        }
+
+        public TemplateCapability(boolean given)
+        {
+            this.given = given;
         }
     }
 }
