@@ -66,8 +66,7 @@ public class TemplateConfig
             {
                 JsonElement config = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), JsonElement.class);
 
-                var result = CONFIG_CODEC.decode(JsonOps.INSTANCE, config).get();
-                return result.map(
+                return CONFIG_CODEC.decode(JsonOps.INSTANCE, config).mapOrElse(
                         ok -> {
                             itemSets = new HashMap<>(ok.getFirst());
 
