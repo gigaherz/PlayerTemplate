@@ -5,6 +5,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -170,7 +171,7 @@ public class PlayerTemplateMod
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.Keys.ATTACHMENT_TYPES, MODID);
 
 
-    public static final Codec<TemplateCapability> CODEC = RecordCodecBuilder.create(inst ->
+    public static final MapCodec<TemplateCapability> CODEC = RecordCodecBuilder.mapCodec(inst ->
             inst.group(Codec.BOOL.fieldOf("given").forGetter(t -> t.given))
                     .apply(inst, TemplateCapability::new));
     public static final Supplier<AttachmentType<TemplateCapability>> TEMPLATE = ATTACHMENT_TYPES.register(
