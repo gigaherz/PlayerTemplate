@@ -10,9 +10,8 @@ import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.neoforged.fml.loading.FMLPaths;
-import net.neoforged.neoforge.items.ItemHandlerHelper;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -32,13 +31,13 @@ public class TemplateConfig
         return itemSets.keySet();
     }
 
-    public record ItemEntry(int slot, ItemStack stack)
+    public record ItemEntry(int slot, ItemStackTemplate stack)
     {
     }
 
     public static final Codec<ItemEntry> ENTRY_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.INT.fieldOf("slot").forGetter(ItemEntry::slot),
-            ItemStack.CODEC.fieldOf("stack").forGetter(ItemEntry::stack)
+            ItemStackTemplate.CODEC.fieldOf("stack").forGetter(ItemEntry::stack)
     ).apply(instance, ItemEntry::new));
 
     public static final Codec<Map<String, List<ItemEntry>>> CONFIG_CODEC = Codec.either(
@@ -75,7 +74,7 @@ public class TemplateConfig
                         error -> {
                             itemSets = new HashMap<>();
 
-                            LOGGER.error("Error loading playertemplate config!");
+                            LOGGER.error("Error loading playertemplate config! Error = {}", error.message());
 
                             return false;
                         }
@@ -168,13 +167,13 @@ public class TemplateConfig
         for (var itemEntry : set)
         {
             var slot = itemEntry.slot();
-            var stack = itemEntry.stack().copy();
+            var stack = itemEntry.stack().create();
 
             var inv = player.getInventory();
             var existing = inv.getItem(slot);
             if (existing.getCount() > 0)
             {
-                ItemHandlerHelper.giveItemToPlayer(player, stack);
+                player.getInventory().add(stack);
             }
             else
             {
@@ -194,7 +193,7 @@ public class TemplateConfig
             var stack = inv.getItem(i);
             if (stack.getCount() > 0)
             {
-                items.add(new ItemEntry(i, stack));
+                items.add(new ItemEntry(i, new ItemStackTemplate(stack.getItem(), stack.getCount(), stack.getComponentsPatch())));
             }
         }
 

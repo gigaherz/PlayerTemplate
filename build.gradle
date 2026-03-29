@@ -2,15 +2,15 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'idea'
-    id 'net.neoforged.moddev' version '2.0.95'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
-neoForge.version = "21.6.5-beta"
-version = '1.5.0'
+neoForge.version = "26.1.0.7-beta"
+version = '1.6.0'
 group = 'dev.gigaherz.playertemplate'
 base.archivesName = "PlayerTemplate-${neoForge.minecraftVersion}"
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 java.withSourcesJar()
 
@@ -36,11 +36,6 @@ neoForge {
         thismod {
             sourceSet(sourceSets.main)
         }
-    }
-
-    parchment {
-        minecraftVersion = "1.21.5"
-        mappingsVersion = "2025.06.15"
     }
 }
 
@@ -69,7 +64,7 @@ project.afterEvaluate {
     publishing {
         publications {
             mavenJava(MavenPublication) {
-                artifactId project.archivesBaseName
+                artifactId = project.base.archivesName
                 from components.java
             }
         }

@@ -62,7 +62,7 @@ public class PlayerTemplateMod
     {
         event.getDispatcher().register(
                 LiteralArgumentBuilder.<CommandSourceStack>literal("playertemplate")
-                        .requires(cs -> cs.hasPermission(Commands.LEVEL_GAMEMASTERS)) //permission
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)) //permission
                         .then(Commands.literal("give")
                                 .then(Commands.argument("players", EntityArgument.players())
                                         .then(Commands.argument("template", StringArgumentType.word())
@@ -156,7 +156,7 @@ public class PlayerTemplateMod
     private void playerLoggedIn(final PlayerEvent.PlayerLoggedInEvent event)
     {
         var player = event.getEntity();
-        if (player.level().isClientSide) return;
+        if (player.level().isClientSide()) return;
         if (player instanceof FakePlayer) return;
         if (player instanceof ServerPlayer sp)
         {
