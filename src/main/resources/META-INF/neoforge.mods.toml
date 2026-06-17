@@ -14,13 +14,13 @@ Small mod to apply an inventory template to all new players.
 [[dependencies.playertemplate]]
     modId="neoforge"
     type="required"
-    versionRange="[26.1.0.1-beta,)"
+    versionRange="[26.1,)"
     ordering="NONE"
     side="BOTH"
 
 [[dependencies.playertemplate]]
     modId="minecraft"
     type="required"
-    versionRange="[26.1,26.2)"
+    versionRange="[26.1,)"
     ordering="NONE"
     side="BOTH"
